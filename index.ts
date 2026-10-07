@@ -582,12 +582,275 @@ app.delete("/order", async(req : Request, res : Response) => {
     });
 })
 
-app.post("/onramp", (req, res) => {})
-app.get("/equity/available", (req, res) => {})
-app.get("/positions/open/:marketId", (req, res) => {});
-app.get("/positions/closed/:marketId", (req, res) => {});
-app.get("/orders/open/:marketId", (req, res) => {})
-app.get("/orders/:marketId", (req, res) => {})
+app.post("/onramp", async(req : Request, res : Response) => {
+    const authorizationHeader = req.headers.authorization
+    const result =  createOrderSchema.safeParse(req.body)
+
+    if(!authorizationHeader || !authorizationHeader.startsWith("Bearer ")){
+        return res.status(400).json({ success : false , message : "No valid auth token provided in the header"})
+    }
+    
+    const token = authorizationHeader.split(" ")[1]
+
+    if(!token){
+        return res.status(400).json({ success : false , message : "No token provided "})
+    }
+
+    let authTokenPayload 
+
+    try {
+       authTokenPayload = await jwt.verify(token , jwt_secret_key) as {username : string , userId : number}
+    } catch (error) {
+        return res.status(500).json({ success : false , message : "Internal Server Error"})
+    }
+
+    if(!authTokenPayload){
+        return res.status(400).json({ success : false , message : "Invalid Auth Token provided"})
+    }
+
+    const {username , userId} = authTokenPayload
+    
+    const user = users.find((u) => u.userId === userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const {amount} = req.body
+
+  if (!amount || typeof amount !== "number" || amount <= 0) {
+    return res.status(400).json({ success: false, message: "Amount must be a positive number" });
+  }
+
+  // Credit available collateral balance
+  user.collateral.available += amount;
+
+  return res.status(200).json({
+    success: true,
+    message: "Collateral deposited successfully",
+    collateral: user.collateral
+  });
+})
+
+app.get("/equity/available", async(req : Request, res : Response) => {
+    const authorizationHeader = req.headers.authorization
+    const result =  createOrderSchema.safeParse(req.body)
+
+    if(!authorizationHeader || !authorizationHeader.startsWith("Bearer ")){
+        return res.status(400).json({ success : false , message : "No valid auth token provided in the header"})
+    }
+    
+    const token = authorizationHeader.split(" ")[1]
+
+    if(!token){
+        return res.status(400).json({ success : false , message : "No token provided "})
+    }
+
+    let authTokenPayload 
+
+    try {
+       authTokenPayload = await jwt.verify(token , jwt_secret_key) as {username : string , userId : number}
+    } catch (error) {
+        return res.status(500).json({ success : false , message : "Internal Server Error"})
+    }
+
+    if(!authTokenPayload){
+        return res.status(400).json({ success : false , message : "Invalid Auth Token provided"})
+    }
+
+    const {username , userId} = authTokenPayload
+    
+    const user = users.find((u) => u.userId === userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    return res.status(200).json({
+    success: true,
+    collateral: user.collateral
+  });
+})
+
+app.get("/positions/open/:marketId", async(req : Request, res : Response) => {
+    const authorizationHeader = req.headers.authorization
+    const result =  createOrderSchema.safeParse(req.body)
+
+    if(!authorizationHeader || !authorizationHeader.startsWith("Bearer ")){
+        return res.status(400).json({ success : false , message : "No valid auth token provided in the header"})
+    }
+    
+    const token = authorizationHeader.split(" ")[1]
+
+    if(!token){
+        return res.status(400).json({ success : false , message : "No token provided "})
+    }
+
+    let authTokenPayload 
+
+    try {
+       authTokenPayload = await jwt.verify(token , jwt_secret_key) as {username : string , userId : number}
+    } catch (error) {
+        return res.status(500).json({ success : false , message : "Internal Server Error"})
+    }
+
+    if(!authTokenPayload){
+        return res.status(400).json({ success : false , message : "Invalid Auth Token provided"})
+    }
+
+    const {username , userId} = authTokenPayload
+    
+    const user = users.find((u) => u.userId === userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const { marketId } = req.params;
+
+    const openPositions = user.positions.filter(
+        (p) => p.market === marketId && p.qty > 0
+    );
+
+    return res.status(200).json({
+        success: true,
+        market: marketId,
+        positions: openPositions
+    });
+});
+
+
+app.get("/positions/closed/:marketId", async (req : Request, res : Response) => {
+    const authorizationHeader = req.headers.authorization
+    const result =  createOrderSchema.safeParse(req.body)
+
+    if(!authorizationHeader || !authorizationHeader.startsWith("Bearer ")){
+        return res.status(400).json({ success : false , message : "No valid auth token provided in the header"})
+    }
+    
+    const token = authorizationHeader.split(" ")[1]
+
+    if(!token){
+        return res.status(400).json({ success : false , message : "No token provided "})
+    }
+
+    let authTokenPayload 
+
+    try {
+       authTokenPayload = await jwt.verify(token , jwt_secret_key) as {username : string , userId : number}
+    } catch (error) {
+        return res.status(500).json({ success : false , message : "Internal Server Error"})
+    }
+
+    if(!authTokenPayload){
+        return res.status(400).json({ success : false , message : "Invalid Auth Token provided"})
+    }
+
+    const {username , userId} = authTokenPayload
+    
+    const user = users.find((u) => u.userId === userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+    const { marketId } = req.params;
+
+  // Derive closed position trades from global fills where user was long or short
+  const userClosedFills = fills.filter(
+    (f) => f.market === marketId && (f.long === user.userId || f.short === user.userId)
+  );
+
+  return res.status(200).json({
+    success: true,
+    market: marketId,
+    closedFills: userClosedFills
+  });
+});
+
+
+app.get("/orders/open/:marketId", async (req : Request, res : Response) => {
+    const authorizationHeader = req.headers.authorization
+    const result =  createOrderSchema.safeParse(req.body)
+
+    if(!authorizationHeader || !authorizationHeader.startsWith("Bearer ")){
+        return res.status(400).json({ success : false , message : "No valid auth token provided in the header"})
+    }
+    
+    const token = authorizationHeader.split(" ")[1]
+
+    if(!token){
+        return res.status(400).json({ success : false , message : "No token provided "})
+    }
+
+    let authTokenPayload 
+
+    try {
+       authTokenPayload = await jwt.verify(token , jwt_secret_key) as {username : string , userId : number}
+    } catch (error) {
+        return res.status(500).json({ success : false , message : "Internal Server Error"})
+    }
+
+    if(!authTokenPayload){
+        return res.status(400).json({ success : false , message : "Invalid Auth Token provided"})
+    }
+
+    const {username , userId} = authTokenPayload
+    
+    const user = users.find((u) => u.userId === userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+    const { marketId } = req.params;
+
+    const openOrders = user.orders.filter(
+    (o) => o.market === marketId && o.status === "open"
+  );
+
+  return res.status(200).json({
+    success: true,
+    market: marketId,
+    orders: openOrders
+  });
+})
+
+
+app.get("/orders/:marketId", async (req : Request, res : Response) => {
+    const authorizationHeader = req.headers.authorization
+    const result =  createOrderSchema.safeParse(req.body)
+
+    if(!authorizationHeader || !authorizationHeader.startsWith("Bearer ")){
+        return res.status(400).json({ success : false , message : "No valid auth token provided in the header"})
+    }
+    
+    const token = authorizationHeader.split(" ")[1]
+
+    if(!token){
+        return res.status(400).json({ success : false , message : "No token provided "})
+    }
+
+    let authTokenPayload 
+
+    try {
+       authTokenPayload = await jwt.verify(token , jwt_secret_key) as {username : string , userId : number}
+    } catch (error) {
+        return res.status(500).json({ success : false , message : "Internal Server Error"})
+    }
+
+    if(!authTokenPayload){
+        return res.status(400).json({ success : false , message : "Invalid Auth Token provided"})
+    }
+
+    const {username , userId} = authTokenPayload
+    
+    const user = users.find((u) => u.userId === userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+    const { marketId } = req.params;
+    const marketOrders = user.orders.filter((o) => o.market === marketId);
+
+  return res.status(200).json({
+    success: true,
+    market: marketId,
+    orders: marketOrders
+  });
+})
 app.get("/fills", (req, res) => {});
 
 async function liqudationChecks(asset: string, price: number) {
